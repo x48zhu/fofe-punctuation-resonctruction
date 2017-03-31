@@ -122,6 +122,8 @@ class CmnSegmenter( object ):
             graph = self.graph
         )
 
+        self.non_pretrained_params = []
+
         with self.graph.as_default():
             # debug
             # a = tf.constant( numpy.asarray([[[1,2,3]],[[1,2,3]]]), dtype = tf.float32 )
@@ -130,10 +132,16 @@ class CmnSegmenter( object ):
 
             self.__initInput( alpha )
             self.__initConnection( char2vec )
+
             self.adam_op = tf.train.AdamOptimizer(  
                 learning_rate = self.lr,
                 epsilon = 1e-8
-            ).minimize( self.cost )
+            ).minimize( self.cost, var_list = self.non_pretrained_params )
+
+            self.sgd_op = tf.train.GradientDescentOptimizer(
+                learning_rate = self.lr / 2
+            ).minimize( self.cost, var_list = [ self.char2vec ] )
+
             init_op = tf.global_variables_initializer()
 
         self.session.run( init_op )
@@ -163,7 +171,8 @@ class CmnSegmenter( object ):
 
     def __initConnection( self, char2vec ):
         layerSize = [ char2vec.shape[1] * 2 ] + [ 512 * 3 ] + [ len(punc2idx) ]
-        char2vec = tf.Variable( char2vec )
+
+        self.char2vec = tf.Variable( char2vec )
 
         batchSize, contextSize = tf.unstack( tf.shape( self.leftContext ) )
 
@@ -171,11 +180,11 @@ class CmnSegmenter( object ):
         leftAlpha = tf.reshape( rightAlpha[:,::-1], [batchSize, 1, -1] )
 
         leftContext = tf.squeeze( 
-            tf.matmul( leftAlpha, tf.gather( char2vec, self.leftContext ) ), 
+            tf.matmul( leftAlpha, tf.gather( self.char2vec, self.leftContext ) ), 
             squeeze_dims = [1] 
         )
         rightContext = tf.squeeze( 
-            tf.matmul( rightAlpha, tf.gather( char2vec, self.rightContext ) ), 
+            tf.matmul( rightAlpha, tf.gather( self.char2vec, self.rightContext ) ), 
             squeeze_dims = [1] 
         )
 
@@ -193,7 +202,8 @@ class CmnSegmenter( object ):
                     maxval = rng
                 ) 
             )
-            b = tf.zeros( [outSize] )
+            b = tf.Variable( tf.zeros( [outSize] ) )
+            self.non_pretrained_params.extend( [W, b] )
 
             currentOut = tf.add( tf.matmul( currentOut, W ), b )
             if i != len(layerSize) - 2:
@@ -220,7 +230,7 @@ class CmnSegmenter( object ):
     def trainAdam( self, leftContext, rightContext, separator,
                    lr = 0.0128, keepProb = 1 - 0.256 ):
         trainCost = self.session.run( 
-            [ self.adam_op, self.cost ],
+            [ self.adam_op, self.sgd_op, self.cost ],
             feed_dict = {
                 self.leftContext : leftContext,
                 self.rightContext : rightContext,
@@ -306,7 +316,7 @@ if __name__ == '__main__':
 
 
     segmenter = CmnSegmenter( char2vec, args.alpha )
-
+    lr = args.learning_rate
 
     for epoch, f in enumerate(ifilter(lambda f: int(f[-2:]) < 12, filelist)):
         ####################
@@ -328,7 +338,8 @@ if __name__ == '__main__':
                 cost += segmenter.trainAdam( 
                     leftContext, 
                     rightContext, 
-                    separator 
+                    separator,
+                    lr = lr
                 ) * leftContext.shape[0]
 
                 cnt += leftContext.shape[0]
@@ -336,6 +347,7 @@ if __name__ == '__main__':
 
         pbar.close()
         logger.info( '%s trained, avg-cost == %f' % (f, cost / cnt) )
+        lr *= 0.5 ** (1./128)
 
         ##############
         # See accuracy 
