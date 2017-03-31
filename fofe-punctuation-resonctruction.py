@@ -139,6 +139,10 @@ class CmnSegmenter( object ):
             ).minimize( self.cost, var_list = self.non_pretrained_params )
 
             self.sgd_op = tf.train.GradientDescentOptimizer(
+                learning_rate = self.lr
+            ).minimize( self.cost, var_list = self.non_pretrained_params )
+
+            self.char_vec_op = tf.train.GradientDescentOptimizer(
                 learning_rate = self.lr / 2
             ).minimize( self.cost, var_list = [ self.char2vec ] )
 
@@ -230,7 +234,22 @@ class CmnSegmenter( object ):
     def trainAdam( self, leftContext, rightContext, separator,
                    lr = 0.0128, keepProb = 1 - 0.256 ):
         trainCost = self.session.run( 
-            [ self.adam_op, self.sgd_op, self.cost ],
+            [ self.adam_op, self.char_vec_op, self.cost ],
+            feed_dict = {
+                self.leftContext : leftContext,
+                self.rightContext : rightContext,
+                self.target : separator,
+                self.lr : lr,
+                self.keepProb : keepProb
+            }
+        )
+        return trainCost[-1]
+
+
+    def trainSGD( self, leftContext, rightContext, separator,
+                  lr = 0.0128, keepProb = 1 - 0.256 ):
+        trainCost = self.session.run( 
+            [ self.sgd_op, self.char_vec_op, self.cost ],
             feed_dict = {
                 self.leftContext : leftContext,
                 self.rightContext : rightContext,
@@ -300,6 +319,8 @@ if __name__ == '__main__':
                          help = 'how many characters to look ahead' )
     parser.add_argument( '--batch_size', type = int, default = 256 )
     parser.add_argument( '--learning_rate', type = float, default = 0.0128 )
+    parser.add_argument( '--algorithm', type = str, default = 'sgd', 
+                         choices = ['adam', 'sgd'] )
 
     args = parser.parse_args()
     logger.info( args )
@@ -329,13 +350,19 @@ if __name__ == '__main__':
         pbar = tqdm( total = len(train) )
         cnt, cost = 0, 0
 
+        if args.algorithm == 'sgd':
+            trainer = segmenter.trainSGD 
+        elif args.algorithm == 'adam':
+            trainer = segmenter.trainAdam
+        else:
+            raise NotImplementedError( 'hopelessness is your end' ) 
+
         for leftContext, rightContext, separator in \
                 train.miniBatch( batchSize = args.batch_size, 
                                  contextSize = args.context_size,
-                                 shuffle = True ):
-
+                                 shuffle = True ): 
             if leftContext.shape[0] == args.batch_size:
-                cost += segmenter.trainAdam( 
+                cost += trainer( 
                     leftContext, 
                     rightContext, 
                     separator,
