@@ -174,7 +174,7 @@ class CmnSegmenter( object ):
 
 
     def __initConnection( self, char2vec ):
-        layerSize = [ char2vec.shape[1] * 2 ] + [ 512 * 3 ] + [ len(punc2idx) ]
+        layerSize = [ char2vec.shape[1] * 2 ] + [ 512 ] * 3 + [ len(punc2idx) ]
 
         self.char2vec = tf.Variable( char2vec )
 
@@ -303,6 +303,15 @@ def EvalTest( segmenter, data ):
 
 ################################################################################
 
+def ProcessConfusion (confMat,segmenter, data):
+    
+    for leftContext, rightContext, separator in data.miniBatch(batchSize = 128, shuffle = False):
+        predict = segmenter.infer(leftContext, rightContext)
+        for i, j in zip(separator, predict):
+            confMat[i, j] = confMat[i, j] + 1
+    return confMat
+
+
 
 if __name__ == '__main__':
     logging.basicConfig( format = '%(asctime)s : %(levelname)s : %(message)s', 
@@ -379,6 +388,7 @@ if __name__ == '__main__':
         ##############
         # See accuracy 
         if (epoch + 1) % 11 == 0:
+            confMat = numpy.zeros([len(punc2idx), len(punc2idx)])
             testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
             ff = testlist[epoch % len(testlist)]
             filename = os.path.join( args.src_dir, ff )
@@ -386,7 +396,11 @@ if __name__ == '__main__':
             test = BatchConstructor( filename, punc2idx, char2idx )
             logger.info( '%s loaded' % ff )
             nCorrect = EvalTest( segmenter, test )
+            confMat = ProcessConfusion(confMat, segmenter, test)
+            logger.info('the confusion matrix is ')
+            logger.info(confMat)
             logger.info( 'accuracy of %s: %d / %d' % (ff, nCorrect, len(test)) )
+
 
 
 
