@@ -311,6 +311,15 @@ def ProcessConfusion (confMat,segmenter, data):
             confMat[i, j] = confMat[i, j] + 1
     return confMat
 
+def calculatePrecisionRecall (confMat):
+    totalPrecision = numpy.sum(confMat, axis = 0)
+    totalRecall = numpy.sum(confMat, axis = 1)
+    trueVal = confMat.diagonal()
+    avgPrecision = numpy.mean(numpy.divide(trueVal, totalPrecision))
+    avgRecall = numpy.mean(numpy.divide(trueVal, totalRecall))
+    F1 = 2.0*(avgPrecision*avgRecall)/(avgPrecision+avgRecall)
+    return avgPrecision, avgRecall, F1
+
 
 
 if __name__ == '__main__':
@@ -395,11 +404,19 @@ if __name__ == '__main__':
 
             test = BatchConstructor( filename, punc2idx, char2idx )
             logger.info( '%s loaded' % ff )
-            nCorrect = EvalTest( segmenter, test )
+            nCorrectTrain = EvalTest (segmenter, train)
+            nCorrectTest = EvalTest( segmenter, test )
             confMat = ProcessConfusion(confMat, segmenter, test)
+            precison, recall, f1 = calculatePrecisionRecall(confMat)
             logger.info('the confusion matrix is ')
             logger.info(confMat)
-            logger.info( 'accuracy of %s: %d / %d' % (ff, nCorrect, len(test)) )
+            logger.info('accuracy of Train %s: %d / %d' % (f, nCorrectTrain, len(train) ))
+            logger.info( 'accuracy of Test %s: %d / %d' % (ff, nCorrectTest, len(test)) )
+            logger.info( 'precision is '+str(precison))
+            logger.info( 'recall is '+str(recall))
+            logger.info( 'F1 is '+str(f1))
+            logger.info( 'test Accuracy '+str(float(nCorrectTest)/len(test)))
+    logger.info('Training and Testing Complete')
 
 
 
