@@ -19,6 +19,8 @@ if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument( 'rspecifier', type = str, help = 'path to input file' )
 	parser.add_argument( 'wspecifier', type = str, help = 'basename of output files' )
+	
+	parser.add_argument( '--rencode', type = str, default='utf-8', help = 'basename of output files' )
 
 	args = parser.parse_args()
 	logger.info( args )
@@ -30,7 +32,7 @@ if __name__ == '__main__':
 
 	logger.info( sep )
 
-	with codecs.open( args.rspecifier, 'rb', 'utf-8' ) as rspecifier:
+	with codecs.open( args.rspecifier, 'rb', args.rencode ) as rspecifier:
 		data = rspecifier.read().strip()
 
 	pos = []
