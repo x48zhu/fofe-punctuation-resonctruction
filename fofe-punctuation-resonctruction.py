@@ -30,16 +30,16 @@ logger = logging.getLogger()
 #     # u'？' : 5
 # }
 
+# 0 is reserved
 punc2idx = {
-    u'。' : 0,
-    '.': 0,
-    u'，' : 1,
-    ',': 1,
-    u'？' : 2,
-    '?': 2,
-    u'！': 3,
-    '!': 3,
-    u'<other>' : 4,
+    u'。' : 1,
+    '.': 1,
+    u'，' : 2,
+    ',': 2,
+    u'？' : 3,
+    '?': 3,
+    u'！': 4,
+    '!': 4
 }
 
 
@@ -63,8 +63,24 @@ class BatchConstructor( object ):
         self.char = [ char2idx.get(c, c_unk) for c in \
                       imap( lambda c: u'<numeric>' if re.match(number, c) else c, char ) ]
 
-        s_other = punc2idx['<other>']
-        self.sep = numpy.asarray([ punc2idx.get(s, s_other) for s in sep ], dtype = numpy.int32)
+        # s_other = punc2idx['<other>']
+        # self.sep = numpy.asarray([ punc2idx.get(s, s_other) for s in sep ], dtype = numpy.int32)
+
+        s_other = 0
+        target = ''.join(punc2idx.keys())
+        # self.sep = numpy.asarray([ punc2idx[t] if t in s else s_other for t in target for s in sep ], dtype = numpy.int32)
+
+        temp = []
+        for s in sep:
+            target_found = False
+            for t in target:
+                if t in s:
+                    temp.append(punc2idx[t])
+                    target_found = True
+                    break
+            if not target_found:
+                temp.append(s_other)
+        self.sep = numpy.asarray(temp)
 
 
     def __len__( self ):
