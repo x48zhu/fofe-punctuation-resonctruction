@@ -58,6 +58,17 @@ class LSTMTagger(nn.Module):
 		values, indices = torch.max(tag_scores, 1)
 		return indices
 
+	def accuracy( self, leftContext, rightContext, separator ):
+		separator = autograd.Variable(torch.from_numpy(separator))
+		sentence_in = autograd.Variable(
+			torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
+		)
+		tag_scores = model(sentence_in)
+
+		values, indices = torch.max(tag_scores, 1)
+		nCorrect = separator.eq(tag_scores).sum()
+		return nCorrect
+
 
 if __name__ == '__main__':
 	logging.basicConfig( format = '%(asctime)s : %(levelname)s : %(message)s', 
@@ -100,6 +111,7 @@ if __name__ == '__main__':
 		filename = os.path.join( args.src_dir, f )
 		train = BatchConstructor( filename, punc2idx, char2idx )
 		logger.info( '%s loaded' % f )
+		cnt, cost = 0, 0
 
 		for leftContext, rightContext, separator in \
 				train.miniBatch( batchSize = args.batch_size, 
@@ -113,32 +125,35 @@ if __name__ == '__main__':
 					torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
 				)
 
-				# tag_scores = model(torch.cat(leftContext, rightContext))
 				tag_scores = model(sentence_in)
 
 				loss = loss_function(tag_scores, autograd.Variable(torch.from_numpy(separator)))
 				loss.backward()
 				optimizer.step()
-		break
 
-		 if (epoch + 1) % 11 == 0:
-            confMat = numpy.zeros([len(punc2idx), len(punc2idx)])
-            testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
-            ff = testlist[epoch % len(testlist)]
-            filename = os.path.join( args.src_dir, ff )
+				cnt += leftContext.shape[0]
+				cost +=loss.data[0]
+		logger.info( '%s trained, avg-cost == %f' % (f, cost / cnt) )
+		
 
-            test = BatchConstructor( filename, punc2idx, char2idx )
-            logger.info( '%s loaded' % ff )
-            nCorrectTrain = EvalTest (segmenter, train)
-            nCorrectTest = EvalTest( segmenter, test )
-            confMat = ProcessConfusion(confMat, segmenter, test)
-            precison, recall, f1 = calculatePrecisionRecall(confMat)
-            logger.info('the confusion matrix is ')
-            logger.info(confMat)
-            logger.info('accuracy of Train %s: %d / %d' % (f, nCorrectTrain, len(train) ))
-            logger.info( 'accuracy of Test %s: %d / %d' % (ff, nCorrectTest, len(test)) )
-            logger.info( 'precision is '+str(precison))
-            logger.info( 'recall is '+str(recall))
-            logger.info( 'F1 is '+str(f1))
-            logger.info( 'test Accuracy '+str(float(nCorrectTest)/len(test)))
+		if (epoch + 1) % 11 == 0:
+			confMat = numpy.zeros([len(punc2idx), len(punc2idx)])
+			testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
+			ff = testlist[epoch % len(testlist)]
+			filename = os.path.join( args.src_dir, ff )
+
+			test = BatchConstructor( filename, punc2idx, char2idx )
+			logger.info( '%s loaded' % ff )
+			nCorrectTrain = EvalTest (segmenter, train)
+			nCorrectTest = EvalTest( segmenter, test )
+			confMat = ProcessConfusion(confMat, segmenter, test)
+			precison, recall, f1 = calculatePrecisionRecall(confMat)
+			logger.info('the confusion matrix is ')
+			logger.info(confMat)
+			logger.info('accuracy of Train %s: %d / %d' % (f, nCorrectTrain, len(train) ))
+			logger.info( 'accuracy of Test %s: %d / %d' % (ff, nCorrectTest, len(test)) )
+			logger.info( 'precision is '+str(precison))
+			logger.info( 'recall is '+str(recall))
+			logger.info( 'F1 is '+str(f1))
+			logger.info( 'test Accuracy '+str(float(nCorrectTest)/len(test)))
 	logger.info('Training and Testing Complete')
