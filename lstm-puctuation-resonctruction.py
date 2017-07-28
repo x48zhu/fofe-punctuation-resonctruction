@@ -101,10 +101,16 @@ if __name__ == '__main__':
 	logger.info( 'e.g. %s' % str(filelist[:10]) )
 
 	HIDDEN_DIM = 256 # TODO: tune this
-	NUM_CLASS = 4 # four types of punctuation
+	NUM_CLASS = 5 # four types of punctuation + other
 
+	use_gpu = torch.cuda.is_available()
 	model = LSTMTagger(char2vec, HIDDEN_DIM, NUM_CLASS, args.batch_size)
-	loss_function = nn.NLLLoss()
+	loss_function = nn.NLLLoss().cuda()
+
+	if use_gpu:
+		model = model.cuda()
+		loss_function = loss_function.cuda()
+	
 	optimizer = optim.SGD(model.parameters(), lr=0.1)
 
 	for epoch, f in enumerate(ifilter(lambda f: int(f[-2:]) < 12, filelist)):
@@ -124,16 +130,24 @@ if __name__ == '__main__':
 				sentence_in = autograd.Variable(
 					torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
 				)
+				target_in = autograd.Variable(torch.from_numpy(separator))
+
+				if use_gpu:
+					sentence_in = sentence_in.cuda()
+					target_in = target_in.cuda()
 
 				tag_scores = model(sentence_in)
-
-				loss = loss_function(tag_scores, autograd.Variable(torch.from_numpy(separator)))
+				loss = loss_function(tag_scores,target_in )
 				loss.backward()
 				optimizer.step()
 
 				cnt += leftContext.shape[0]
-				cost +=loss.data[0]
-		logger.info( '%s trained, avg-cost == %f' % (f, cost / cnt) )
+				if use_gpu:
+					cost += loss.data.cpu()[0] * leftContext.shape[0]
+				else:
+					cost += loss.data[0] * leftContext.shape[0]
+					
+		logger.info('%s trained, avg-cost == %f' % (f, cost / cnt))
 		
 
 		if (epoch + 1) % 11 == 0:
