@@ -11,6 +11,7 @@ class LSTMTagger(nn.Module):
 
 	def __init__(self, char2vec, hidden_dim, tagset_size, minibatch_size):
 		super(LSTMTagger, self).__init__()
+		self.use_gpu = torch.cuda.is_available()
 		self.hidden_dim = hidden_dim
 		self.layer_size = 2 # 2 for number of layers, hardcode for now
 
@@ -30,8 +31,12 @@ class LSTMTagger(nn.Module):
 		# Refer to the Pytorch documentation to see exactly
 		# why they have this dimensionality.
 		# The axes semantics are (num_layers, minibatch_size, hidden_dim)
-		return (autograd.Variable(torch.zeros(self.layer_size * 2, minibatch_size, self.hidden_dim)),
-				autograd.Variable(torch.zeros(self.layer_size * 2, minibatch_size, self.hidden_dim)))
+		if self.use_gpu:
+			return (autograd.Variable(torch.zeros(self.layer_size * 2, minibatch_size, self.hidden_dim).cuda()),
+					autograd.Variable(torch.zeros(self.layer_size * 2, minibatch_size, self.hidden_dim).cuda()))
+		else:
+			return (autograd.Variable(torch.zeros(self.layer_size * 2, minibatch_size, self.hidden_dim)),
+					autograd.Variable(torch.zeros(self.layer_size * 2, minibatch_size, self.hidden_dim)))
 
 	def forward(self, sentences):
 		# sentences is 2D tensor
@@ -51,22 +56,31 @@ class LSTMTagger(nn.Module):
 		return tag_scores
 
 	def infer(self, leftContext, rightContext):
+		self.hidden = self.init_hidden(args.batch_size)
 		sentence_in = autograd.Variable(
 			torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
 		)
+		if self.use_gpu:
+			sentence_in = sentence_in.cuda()
 		tag_scores = model(sentence_in)
+		if self.use_gpu:
+			tag_scores = tag_scores.cpu()
 		values, indices = torch.max(tag_scores, 1)
 		return indices
 
 	def accuracy( self, leftContext, rightContext, separator ):
+		self.hidden = self.init_hidden(args.batch_size)
 		separator = autograd.Variable(torch.from_numpy(separator))
 		sentence_in = autograd.Variable(
 			torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
 		)
+		if self.use_gpu:
+			sentence_in = sentence_in.cuda()
 		tag_scores = model(sentence_in)
-
+		if self.use_gpu:
+			tag_scores = tag_scores.cpu()
 		values, indices = torch.max(tag_scores, 1)
-		nCorrect = separator.eq(tag_scores).sum()
+		nCorrect = separator.eq(indices).sum()
 		return nCorrect
 
 
@@ -101,10 +115,15 @@ if __name__ == '__main__':
 	logger.info( 'e.g. %s' % str(filelist[:10]) )
 
 	HIDDEN_DIM = 256 # TODO: tune this
-	NUM_CLASS = 4 # four types of punctuation
+	NUM_CLASS = 5 # four types of punctuation + other
 
 	model = LSTMTagger(char2vec, HIDDEN_DIM, NUM_CLASS, args.batch_size)
-	loss_function = nn.NLLLoss()
+	loss_function = nn.NLLLoss().cuda()
+
+	if model.use_gpu:
+		model = model.cuda()
+		loss_function = loss_function.cuda()
+	
 	optimizer = optim.SGD(model.parameters(), lr=0.1)
 
 	for epoch, f in enumerate(ifilter(lambda f: int(f[-2:]) < 12, filelist)):
@@ -124,19 +143,27 @@ if __name__ == '__main__':
 				sentence_in = autograd.Variable(
 					torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
 				)
+				target_in = autograd.Variable(torch.from_numpy(separator).type(torch.LongTensor))
+
+				if model.use_gpu:
+					sentence_in = sentence_in.cuda()
+					target_in = target_in.cuda()
 
 				tag_scores = model(sentence_in)
-
-				loss = loss_function(tag_scores, autograd.Variable(torch.from_numpy(separator)))
+				loss = loss_function(tag_scores,target_in )
 				loss.backward()
 				optimizer.step()
 
 				cnt += leftContext.shape[0]
-				cost +=loss.data[0]
-		logger.info( '%s trained, avg-cost == %f' % (f, cost / cnt) )
+				if model.use_gpu:
+					cost += loss.data.cpu()[0] * leftContext.shape[0]
+				else:
+					cost += loss.data[0] * leftContext.shape[0]
+
+		logger.info('%s trained, avg-cost == %f' % (f, cost / cnt))
 		
 
-		if (epoch + 1) % 11 == 0:
+		if (epoch + 1) % 2 == 0:
 			confMat = numpy.zeros([len(punc2idx), len(punc2idx)])
 			testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
 			ff = testlist[epoch % len(testlist)]
@@ -144,9 +171,9 @@ if __name__ == '__main__':
 
 			test = BatchConstructor( filename, punc2idx, char2idx )
 			logger.info( '%s loaded' % ff )
-			nCorrectTrain = EvalTest (segmenter, train)
-			nCorrectTest = EvalTest( segmenter, test )
-			confMat = ProcessConfusion(confMat, segmenter, test)
+			nCorrectTrain = EvalTest (model, train, batchSize=args.batch_size)
+			nCorrectTest = EvalTest( model, test, batchSize=args.batch_size )
+			confMat = ProcessConfusion(confMat, model, test, batchSize=args.batch_size)
 			precison, recall, f1 = calculatePrecisionRecall(confMat)
 			logger.info('the confusion matrix is ')
 			logger.info(confMat)

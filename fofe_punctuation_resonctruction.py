@@ -318,10 +318,10 @@ class CmnSegmenter( object ):
 ################################################################################
 
 
-def EvalTest( segmenter, data ):
+def EvalTest( segmenter, data, batchSize=128 ):
     nCorrect = 0
     for leftContext, rightContext, separator in \
-        data.miniBatch( batchSize = 128, shuffle = False ):
+        data.miniBatch( batchSize = batchSize, shuffle = False ):
         nCorrect += segmenter.accuracy( 
             leftContext, 
             rightContext, 
@@ -332,9 +332,9 @@ def EvalTest( segmenter, data ):
 
 ################################################################################
 
-def ProcessConfusion (confMat,segmenter, data):
+def ProcessConfusion (confMat,segmenter, data, batchSize=128):
     
-    for leftContext, rightContext, separator in data.miniBatch(batchSize = 128, shuffle = False):
+    for leftContext, rightContext, separator in data.miniBatch(batchSize = batchSize, shuffle = False):
         predict = segmenter.infer(leftContext, rightContext)
         for i, j in zip(separator, predict):
             confMat[i, j] = confMat[i, j] + 1
