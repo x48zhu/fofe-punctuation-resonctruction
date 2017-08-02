@@ -43,7 +43,7 @@ class LSTMTagger(nn.Module):
 		n_sentence, context_size = sentences.size(0), sentences.size(1)
 		embeds = self.word_embeddings(sentences)
 
-		lstm_out, self.hidden = self.lstm(embeds, self.hidden)
+		lstm_out, _ = self.lstm(embeds, self.init_hidden(n_sentence))
 		middle = context_size / 2 - 1
 
 		# projection = lstm_out[:,middle:middle+2,:].view(n_sentence, -1)
@@ -66,13 +66,14 @@ class LSTMTagger(nn.Module):
 		if self.use_gpu:
 			tag_scores = tag_scores.cpu()
 		values, indices = torch.max(tag_scores, 1)
-		return indices
+		return list(indices.data)
 
 	def accuracy( self, leftContext, rightContext, separator ):
 		self.hidden = self.init_hidden(args.batch_size)
-		separator = autograd.Variable(torch.from_numpy(separator))
+		separator = autograd.Variable(torch.from_numpy(separator).type(torch.LongTensor), volatile=True)
 		sentence_in = autograd.Variable(
-			torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor)
+			torch.from_numpy(numpy.concatenate((leftContext, rightContext),axis=1)).type(torch.LongTensor),
+			volatile=True
 		)
 		if self.use_gpu:
 			sentence_in = sentence_in.cuda()
@@ -81,7 +82,7 @@ class LSTMTagger(nn.Module):
 			tag_scores = tag_scores.cpu()
 		values, indices = torch.max(tag_scores, 1)
 		nCorrect = separator.eq(indices).sum()
-		return nCorrect
+		return nCorrect.data[0]
 
 
 if __name__ == '__main__':
@@ -163,8 +164,8 @@ if __name__ == '__main__':
 		logger.info('%s trained, avg-cost == %f' % (f, cost / cnt))
 		
 
-		if (epoch + 1) % 2 == 0:
-			confMat = numpy.zeros([len(punc2idx), len(punc2idx)])
+		if (epoch + 1) % 11 == 0:
+			confMat = numpy.zeros([NUM_CLASS, NUM_CLASS])
 			testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
 			ff = testlist[epoch % len(testlist)]
 			filename = os.path.join( args.src_dir, ff )
@@ -184,3 +185,5 @@ if __name__ == '__main__':
 			logger.info( 'F1 is '+str(f1))
 			logger.info( 'test Accuracy '+str(float(nCorrectTest)/len(test)))
 	logger.info('Training and Testing Complete')
+
+# Training data count: (array([0, 1, 2, 3, 4]), array([591427,  13669,  22341,     43,     15]))

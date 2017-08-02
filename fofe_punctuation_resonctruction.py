@@ -426,7 +426,8 @@ if __name__ == '__main__':
         ##############
         # See accuracy 
         if (epoch + 1) % 11 == 0:
-            confMat = numpy.zeros([len(punc2idx), len(punc2idx)])
+            dim = len(set(punc2idx.values()))
+            confMat = numpy.zeros([dim, dim])
             testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
             ff = testlist[epoch % len(testlist)]
             filename = os.path.join( args.src_dir, ff )
