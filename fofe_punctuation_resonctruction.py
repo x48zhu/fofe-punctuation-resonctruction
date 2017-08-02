@@ -428,7 +428,7 @@ if __name__ == '__main__':
         ##############
         # See accuracy 
         if (epoch + 1) % 11 == 0:
-            dim = len(set(punc2idx.values()))
+            dim = len(set(punc2idx.values())) + 1 # plus one for no-space
             confMat = numpy.zeros([dim, dim])
             testlist = list( ifilter(lambda f: int(f[-2:]) == 12, filelist) )
             ff = testlist[epoch % len(testlist)]
