@@ -15,6 +15,7 @@ from itertools import imap, ifilter
 from tqdm import tqdm
 from hanziconv import HanziConv
 
+from utils import LearningCurvePlotter
 logger = logging.getLogger()
 
 
@@ -382,6 +383,7 @@ if __name__ == '__main__':
     logger.info( 'number of training files: %d' % len(filelist) )
     logger.info( 'e.g. %s' % str(filelist[:10]) )
 
+    plotter = LearningCurvePlotter("train_cost", "train_accuracy", "test_accuracy", "f1_score")
 
     segmenter = CmnSegmenter( char2vec, args.alpha )
     lr = args.learning_rate
@@ -446,6 +448,15 @@ if __name__ == '__main__':
             logger.info( 'recall is '+str(recall))
             logger.info( 'F1 is '+str(f1))
             logger.info( 'test Accuracy '+str(float(nCorrectTest)/len(test)))
+            plotter.update(
+                train_cost=cost/cnt, 
+                train_accuracy=nCorrectTrain/len(train), 
+                test_accuracy=nCorrectTest/len(test),
+                f1_score=f1
+            )
+        if (epoch + 1) % 31 == 0:
+            plotter.plot("/eecs/research/asr/xzhu/punctuation/fofe-punctuation-resonctruction/temp")
+
     logger.info('Training and Testing Complete')
 
 

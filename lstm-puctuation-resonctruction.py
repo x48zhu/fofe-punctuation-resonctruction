@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from fofe_punctuation_resonctruction import *
+from utils import LearningCurvePlotter
 
 class LSTMTagger(nn.Module):
 
@@ -117,6 +118,7 @@ if __name__ == '__main__':
 
 	HIDDEN_DIM = 256 # TODO: tune this
 	NUM_CLASS = 5 # four types of punctuation + other
+	plotter = LearningCurvePlotter("train_cost", "train_accuracy", "test_accuracy", "f1_score")
 
 	model = LSTMTagger(char2vec, HIDDEN_DIM, NUM_CLASS, args.batch_size)
 	loss_function = nn.NLLLoss().cuda()
@@ -184,6 +186,15 @@ if __name__ == '__main__':
 			logger.info( 'recall is '+str(recall))
 			logger.info( 'F1 is '+str(f1))
 			logger.info( 'test Accuracy '+str(float(nCorrectTest)/len(test)))
+
+			plotter.update(
+				train_cost=cost/cnt, 
+				train_accuracy=nCorrectTrain/len(train), 
+				test_accuracy=nCorrectTest/len(test),
+				f1_score=f1
+			)
+		if (epoch + 1) % 11 == 0:
+			plotter.plot("/eecs/research/asr/xzhu/punctuation/fofe-punctuation-resonctruction/temp")
 	logger.info('Training and Testing Complete')
 
 # Training data count: (array([0, 1, 2, 3, 4]), array([591427,  13669,  22341,     43,     15]))
